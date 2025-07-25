@@ -9,6 +9,9 @@ import threading
 output_lock = threading.Lock()
 log_lock = threading.Lock()
 
+executing_jobs = {} # cmd-id -> Job
+cancelled_jobs = {} # cmd-id -> Job
+
 log_fp = open("pynb.log", "a+")
 def log(msg, *args):
     if args:
@@ -19,21 +22,47 @@ def log(msg, *args):
 
 def respond(req_id, output):
     with output_lock:
+        if req_id in cancelled_jobs:
+            raise Exception("this job cmd-id %r is cancelled!" % req_id)
         log("sending output for %r: %r" % (req_id, output))
         sys.stdout.write("cmd-output %s: %d\n%s" % (req_id, len(output), output))
         sys.stdout.flush()
 
-def executor(req_id, content):
-    log("executor for req_id %r started. content:\n%s\n####" % (req_id, content))
-    time.sleep(1)
-    respond(req_id, "this is reponse for %r -- started!" % req_id)
-    time.sleep(1)
-    respond(req_id, "after 2s")
-    time.sleep(1)
-    respond(req_id, "after 3s")
-    time.sleep(1)
-    respond(req_id, "done")
-    log("did send response")
+class Job:
+    def __init__(self, cmd_id, content):
+        self._aborted = False
+        self.cmd_id = cmd_id
+        self.content = content
+
+        self.thread = threading.Thread(target=self.runner)
+        self.thread.daemon = True
+        self.thread.start()
+
+    def runner(self):
+        log("executor for self.cmd_id %r started. content:\n%s\n####" % (self.cmd_id, content))
+        self.sleep(1)
+        respond(self.cmd_id, "this is reponse for %r -- started!" % self.cmd_id)
+        self.sleep(1)
+        respond(self.cmd_id, "after 2s")
+        self.sleep(1)
+        respond(self.cmd_id, "after 3s")
+        self.sleep(1)
+        respond(self.cmd_id, "done")
+        log("did send response")
+
+    def abort(self):
+        self._aborted = True
+
+    def sleep(self, t):
+        deadline = time.time() + t
+        while time.time() < deadline:
+            if self._aborted:
+                raise Exception("job %r aborted." % self.cmd_id)
+            remaining = deadline - time.time()
+            if remaining < 0:
+                break
+            to_sleep = min(remaining, 0.5)
+            time.sleep(to_sleep)
 
 def read_line():
     """Read a line (bytes) from stdin.buffer and decode UTF-8."""
@@ -63,18 +92,18 @@ while True:
             log("n_bytes: %d" % n_bytes)
 
             content = sys.stdin.buffer.read(n_bytes).decode("utf-8")
-            """
-            content = []
-            for i in range(n_bytes):
-                c = sys.stdin.buffer.read(1)
-                log("got char [%d]: %r" % (i, c))
-                content.append(c)
-            content = b"".join(content)
-            content = content.decode("utf-8")
-            """
             log("content: %r\n" % content)
-            th = threading.Thread(target=executor, args=(req_id, content))
-            th.daemon = True
-            th.start()
+            executing_jobs[req_id] = Job(req_id, content)
             continue
+        if cmd == "abort":
+            if req_id in executing_jobs:
+                job = executing_jobs.pop(req_id)
+                with output_lock:
+                    cancelled_jobs[req_id] = job
+                job.abort()
+                log("did abort cmd-id %r" % req_id)
+            else:
+                log("can not abort unknown cmd-id %r" % req_id)
+            continue
+
     log("error: unknown command %r" % line)

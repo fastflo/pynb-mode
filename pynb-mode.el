@@ -102,29 +102,41 @@
         (setq loop-continue nil)))))
 
 (defun pynb--insert-output (cmd-id text)
-  "Insert TEXT as output for CMD-ID below the corresponding cell."
-  (let ((overlay (gethash cmd-id pynb--output-overlays)))
-    ;; Remove old overlay if exists
-    (when overlay
-      (delete-overlay overlay))
-    ;; Find the cell position
-    (let ((cell-pos (gethash cmd-id pynb--cell-pos)))
-      (when cell-pos
-        (save-excursion
-          (goto-char cell-pos)
-          ;; Insert a newline before overlay (for visual separation)
-          (insert "\n")
-          (let* ((start (point))
-                 (end (progn
-                        (insert text)
-                        (insert "\n")
-                        (point)))
-                 (ov (make-overlay start end)))
-            ;; Apply background with full-width extension
-            (overlay-put ov 'face '(:background "#e0e0e0" :extend t))
-            (overlay-put ov 'evaporate t)
-            ;; Save overlay
-            (puthash cmd-id ov pynb--output-overlays)))))))
+  "Append TEXT as output for CMD-ID below its cell, keeping background consistent."
+  (let* ((id-str cmd-id)
+         (overlay (gethash id-str pynb--output-overlays)))
+    (if overlay
+        ;; Append new text at overlay end
+        (let ((end (overlay-end overlay)))
+          (save-excursion
+            (goto-char end)
+            ;; Insert text without duplicate newline if already present
+            (unless (bolp) (insert "\n"))
+            (insert text)
+            ;; Ensure newline after this chunk if missing
+            (unless (string-suffix-p "\n" text)
+              (insert "\n"))
+            ;; Extend overlay to new end
+            (move-overlay overlay (overlay-start overlay) (point))))
+      ;; First chunk: create overlay after cell
+      (let ((cell-pos (gethash id-str pynb--cell-pos)))
+        (when cell-pos
+          (save-excursion
+            (goto-char cell-pos)
+            (insert "\n")
+            (let* ((start (point))
+                   (end (progn
+                          (insert text)
+                          (unless (string-suffix-p "\n" text)
+                            (insert "\n"))
+                          (point)))
+                   (ov (make-overlay start end)))
+              (overlay-put ov 'face '(:background "#e0e0e0" :extend t))
+              (overlay-put ov 'evaporate t)
+              ;; Remember overlay
+              (puthash id-str ov pynb--output-overlays))))))))
+
+
 ;; Execution
 (defun pynb--start-executor ()
   "Start Python executor process if not running."
