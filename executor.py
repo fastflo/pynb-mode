@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 import time
 import threading
@@ -18,13 +19,21 @@ def log(msg, *args):
 
 def respond(req_id, output):
     with output_lock:
+        log("sending output for %r: %r" % (req_id, output))
         sys.stdout.write("cmd-output %s: %d\n%s" % (req_id, len(output), output))
         sys.stdout.flush()
 
 def executor(req_id, content):
     log("executor for req_id %r started. content:\n%s\n####" % (req_id, content))
-    time.sleep(2)
-    respond(req_id, "this is reponse for %r\ndone" % content)
+    time.sleep(1)
+    respond(req_id, "this is reponse for %r -- started!" % req_id)
+    time.sleep(1)
+    respond(req_id, "after 2s")
+    time.sleep(1)
+    respond(req_id, "after 3s")
+    time.sleep(1)
+    respond(req_id, "done")
+    log("did send response")
 
 def read_line():
     """Read a line (bytes) from stdin.buffer and decode UTF-8."""
@@ -36,7 +45,7 @@ def read_line():
         line.extend(ch)
     return line.decode('utf-8')
 
-log("this is pynb executor! isatty: %r" % sys.stdin.isatty())
+log("this is pynb executor %d! isatty: %r" % (os.getpid(), sys.stdin.isatty()))
 
 while True:
     line = read_line()
