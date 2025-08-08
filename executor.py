@@ -41,7 +41,7 @@ class Job:
     def runner(self):
         log("executor for self.cmd_id %r started. content:\n%s\n####" % (self.cmd_id, content))
         self.sleep(1)
-        self.output("this is reponse for %r -- started!\n2nd line, no newline" % self.cmd_id)
+        self.output("this is response for %r -- started!\n2nd line, no newline" % self.cmd_id)
         self.sleep(1)
         self.output("after 2s, should be on 2nd line. now newline:\n")
         self.sleep(1)
