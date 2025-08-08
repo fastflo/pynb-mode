@@ -18,6 +18,7 @@
 
 (require 'python)
 (require 'cl-lib)
+(require 'subr-x)
 
 ;; ----------------------
 ;; Internal State
@@ -27,7 +28,7 @@
 (defvar pynb--executor-buffer-data "")
 
 (defvar pynb--cmd-counter 0)
-(defvar-local pynb--cmd-to-cell (make-hash-table :test 'equal)) ;; cmd-id -> cell-id
+(defvar pynb--cmd-to-cell (make-hash-table :test 'equal)) ;; cmd-id -> (buffer . cell-id)
 (defvar-local pynb--active-cells (make-hash-table :test 'equal)) ;; cell-id -> cmd-id
 (defvar-local pynb--output-overlays (make-hash-table :test 'equal)) ;; cell-id -> overlay
 (defvar-local pynb--cell-id-counter 0) ;; increment for each cell
@@ -136,7 +137,7 @@
                        (progn (goto-char end) (forward-line -1) (line-end-position)))))
            (len (string-bytes content))
            (cmd-id (cl-incf pynb--cmd-counter)))
-      (puthash cmd-id cell-id pynb--cmd-to-cell)
+      (puthash cmd-id (cons (current-buffer) cell-id) pynb--cmd-to-cell)
       (puthash cell-id cmd-id pynb--active-cells)
       ;; Send to executor
       (process-send-string pynb--executor-process (format "cmd %d: execute %d\n" cmd-id len))
@@ -167,32 +168,39 @@
         (setq loop nil)))))
 
 (defun pynb--insert-output (cmd-id text)
-  (when-let ((cell-id (gethash cmd-id pynb--cmd-to-cell)))
-    (let ((overlay (gethash cell-id pynb--output-overlays)))
-      (if overlay
-          ;; Append text
-          (let ((end (overlay-end overlay)))
-            (save-excursion
-              (goto-char end)
-              (unless (bolp) (insert "\n"))
-              (insert text)
-              (unless (string-suffix-p "\n" text) (insert "\n"))
-              (move-overlay overlay (overlay-start overlay) (point))))
-        ;; Create new overlay below cell
-        (save-excursion
-          (goto-char (nth 1 (pynb--find-current-cell)))
-          (insert "\n")
-          (let ((start (point)))
-            (insert text)
-            (unless (string-suffix-p "\n" text) (insert "\n"))
-            (let ((end (point))
-                  (ov (make-overlay start end)))
-              (overlay-put ov 'face '(:background "#e0e0e0" :extend t))
-              (overlay-put ov 'before-string
-                           (propertize "\n" 'face '(:background "black" :height 0.1)))
-              (overlay-put ov 'after-string
-                           (propertize "\n" 'face '(:background "black" :height 0.1)))
-              (puthash cell-id ov pynb--output-overlays))))))))
+  (when-let* ((entry (gethash cmd-id pynb--cmd-to-cell))
+              (buf (car entry))
+              (cell-id (cdr entry)))
+    (with-current-buffer buf
+      (let ((overlay (gethash cell-id pynb--output-overlays)))
+        (if overlay
+            ;; Append text
+            (let ((end (overlay-end overlay)))
+              (save-excursion
+                (goto-char end)
+                (unless (bolp) (insert "\n"))
+                (insert text)
+                (unless (string-suffix-p "\n" text) (insert "\n"))
+                (move-overlay overlay (overlay-start overlay) (point))))
+          ;; Create new overlay below cell
+          (save-excursion
+            (when-let ((pos (text-property-any (point-min) (point-max)
+                                               'pynb-cell-id cell-id)))
+              (goto-char pos)
+              (when (re-search-forward "^## cell [0-9]+ end ##" nil t)
+                (goto-char (line-end-position))
+                (insert "\n")
+                (let ((start (point)))
+                  (insert text)
+                  (unless (string-suffix-p "\n" text) (insert "\n"))
+                  (let* ((end (point))
+                         (ov (make-overlay start end)))
+                    (overlay-put ov 'face '(:background "#e0e0e0" :extend t))
+                    (overlay-put ov 'before-string
+                                 (propertize "\n" 'face '(:background "black" :height 0.1)))
+                    (overlay-put ov 'after-string
+                                 (propertize "\n" 'face '(:background "black" :height 0.1)))
+                    (puthash cell-id ov pynb--output-overlays))))))))))
 
 ;; ----------------------
 ;; Minor Mode Setup
