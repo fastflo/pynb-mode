@@ -41,14 +41,17 @@ class Job:
     def runner(self):
         log("executor for self.cmd_id %r started. content:\n%s\n####" % (self.cmd_id, content))
         self.sleep(1)
-        respond(self.cmd_id, "this is reponse for %r -- started!" % self.cmd_id)
+        self.output("this is reponse for %r -- started!\n2nd line, no newline" % self.cmd_id)
         self.sleep(1)
-        respond(self.cmd_id, "after 2s")
+        self.output("after 2s, should be on 2nd line. now newline:\n")
         self.sleep(1)
-        respond(self.cmd_id, "after 3s")
+        self.output("after 3s with newline\n")
         self.sleep(1)
-        respond(self.cmd_id, "done")
+        self.output("done - no newline")
         log("did send response")
+
+    def output(self, text):
+        respond(self.cmd_id, text)
 
     def abort(self):
         self._aborted = True
