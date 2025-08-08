@@ -200,7 +200,7 @@
                                  (propertize "\n" 'face '(:background "black" :height 0.1)))
                     (overlay-put ov 'after-string
                                  (propertize "\n" 'face '(:background "black" :height 0.1)))
-                    (puthash cell-id ov pynb--output-overlays))))))))))
+                    (puthash cell-id ov pynb--output-overlays)))))))))))
 
 ;; ----------------------
 ;; Minor Mode Setup
