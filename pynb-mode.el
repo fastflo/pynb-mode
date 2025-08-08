@@ -189,18 +189,19 @@
               (goto-char pos)
               (when (re-search-forward "^## cell [0-9]+ end ##" nil t)
                 (goto-char (line-end-position))
-                (insert "\n")
-                (let ((start (point)))
+                (let* ((bar (concat (propertize " "
+                                                'display '(space :width (fill . 0))
+                                                'face '(:background "black" :height 0.1))
+                                   "\n"))
+                       (start (point)))
                   (insert text)
                   (unless (string-suffix-p "\n" text) (insert "\n"))
                   (let* ((end (point))
                          (ov (make-overlay start end)))
                     (overlay-put ov 'face '(:background "#e0e0e0" :extend t))
-                    (overlay-put ov 'before-string
-                                 (propertize "\n" 'face '(:background "black" :height 0.1)))
-                    (overlay-put ov 'after-string
-                                 (propertize "\n" 'face '(:background "black" :height 0.1)))
-                    (puthash cell-id ov pynb--output-overlays))))))))))
+                    (overlay-put ov 'before-string bar)
+                    (overlay-put ov 'after-string bar)
+                    (puthash cell-id ov pynb--output-overlays)))))))))))
 
 ;; ----------------------
 ;; Minor Mode Setup
